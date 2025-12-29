@@ -50,6 +50,8 @@ if 'schedule_output' not in st.session_state:
     st.session_state.schedule_output = ""
 if 'task_message' not in st.session_state:
     st.session_state.task_message = {"type": None, "text": ""}
+if 'form_key' not in st.session_state:
+    st.session_state.form_key = 0
 
 def create_task(id, description, duration, dependencies, scheduled, category):
     """Create a Task object"""
@@ -87,13 +89,14 @@ with st.sidebar:
     st.header("➕ Add New Task")
     
     # Use form to automatically clear fields after submission
-    with st.form("add_task_form", clear_on_submit=True):
+    # Use a key that changes to force form reset after successful submission
+    with st.form("add_task_form", clear_on_submit=True, key=f"task_form_{st.session_state.form_key}"):
         # Calculate default task ID
         default_task_id = len(st.session_state.tasks) + 1 if st.session_state.tasks else 1
         
-        task_id = st.number_input("Task ID", min_value=1, value=default_task_id, step=1)
-        task_description = st.text_input("Task Description", placeholder="e.g., Morning jog")
-        task_duration = st.number_input("Duration (minutes)", min_value=1, value=30, step=1)
+        task_id = st.number_input("Task ID", min_value=1, value=default_task_id, step=1, key=f"task_id_{st.session_state.form_key}")
+        task_description = st.text_input("Task Description", placeholder="e.g., Morning jog", key=f"task_desc_{st.session_state.form_key}")
+        task_duration = st.number_input("Duration (minutes)", min_value=1, value=30, step=1, key=f"task_dur_{st.session_state.form_key}")
         
         st.subheader("Optional Settings")
         
@@ -103,17 +106,18 @@ with st.sidebar:
             selected_dependencies = st.multiselect(
                 "Dependencies (Task IDs that must be completed first)",
                 dependency_options,
-                help="Select task IDs that must be completed before this task"
+                help="Select task IDs that must be completed before this task",
+                key=f"deps_{st.session_state.form_key}"
             )
         else:
             selected_dependencies = []
             st.info("Add more tasks to set dependencies")
         
         # Scheduled time
-        has_scheduled_time = st.checkbox("Has specific scheduled time?")
+        has_scheduled_time = st.checkbox("Has specific scheduled time?", key=f"sched_check_{st.session_state.form_key}")
         if has_scheduled_time:
-            scheduled_hour = st.slider("Hour", 0, 23, 9)
-            scheduled_minute = st.slider("Minute", 0, 59, 0, step=5)
+            scheduled_hour = st.slider("Hour", 0, 23, 9, key=f"hour_{st.session_state.form_key}")
+            scheduled_minute = st.slider("Minute", 0, 59, 0, step=5, key=f"min_{st.session_state.form_key}")
             scheduled_time = f"{scheduled_hour:02d}:{scheduled_minute:02d}"
         else:
             scheduled_time = "25:25"
@@ -122,7 +126,8 @@ with st.sidebar:
         category = st.selectbox(
             "Category",
             ["Routine", "Family", "Growth", "Friends", "Hobby", "Other"],
-            index=5
+            index=5,
+            key=f"cat_{st.session_state.form_key}"
         )
         
         # Add task button (inside form)
@@ -151,6 +156,8 @@ with st.sidebar:
                         "type": "success",
                         "text": f"Task '{task_description}' added!"
                     }
+                    # Increment form key to force form reset
+                    st.session_state.form_key += 1
                     st.rerun()
             else:
                 st.session_state.task_message = {
