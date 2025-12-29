@@ -52,6 +52,8 @@ if 'task_message' not in st.session_state:
     st.session_state.task_message = {"type": None, "text": ""}
 if 'form_key' not in st.session_state:
     st.session_state.form_key = 0
+if 'task_description_value' not in st.session_state:
+    st.session_state.task_description_value = ""
 
 def create_task(id, description, duration, dependencies, scheduled, category):
     """Create a Task object"""
@@ -95,7 +97,31 @@ with st.sidebar:
         default_task_id = len(st.session_state.tasks) + 1 if st.session_state.tasks else 1
         
         task_id = st.number_input("Task ID", min_value=1, value=default_task_id, step=1, key=f"task_id_{st.session_state.form_key}")
-        task_description = st.text_input("Task Description", placeholder="e.g., Morning jog", key=f"task_desc_{st.session_state.form_key}")
+        
+        # Task Description with inline clear button
+        st.write("**Task Description**")
+        desc_col1, desc_col2 = st.columns([4, 1])
+        with desc_col1:
+            # Use session state value if available, otherwise empty
+            desc_default = st.session_state.task_description_value if st.session_state.task_description_value else ""
+            task_description = st.text_input(
+                "", 
+                value=desc_default,
+                placeholder="e.g., Morning jog", 
+                key=f"task_desc_{st.session_state.form_key}",
+                label_visibility="collapsed"
+            )
+            # Sync with session state
+            if task_description:
+                st.session_state.task_description_value = task_description
+            elif not task_description and desc_default:
+                st.session_state.task_description_value = ""
+        with desc_col2:
+            st.write("")  # Spacing for alignment
+            if st.form_submit_button("🗑️", help="Clear description", use_container_width=True):
+                st.session_state.task_description_value = ""
+                st.rerun()
+        
         task_duration = st.number_input("Duration (minutes)", min_value=1, value=30, step=1, key=f"task_dur_{st.session_state.form_key}")
         
         st.subheader("Optional Settings")
@@ -156,6 +182,8 @@ with st.sidebar:
                         "type": "success",
                         "text": f"Task '{task_description}' added!"
                     }
+                    # Clear description field
+                    st.session_state.task_description_value = ""
                     # Increment form key to force form reset
                     st.session_state.form_key += 1
                     st.rerun()
