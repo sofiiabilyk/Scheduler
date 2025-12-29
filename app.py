@@ -1,6 +1,9 @@
 import streamlit as st
+import pandas as pd
 from TaskClass import Task
 from TaskSchedulerClass import TaskScheduler
+from ImprovedGreedy_Scheduler import ImprovedGreedy_Scheduler
+from DP_Scheduling import DP_Scheduler
 from datetime import datetime
 import io
 import sys
@@ -48,6 +51,14 @@ if 'tasks' not in st.session_state:
     st.session_state.tasks = []
 if 'schedule_output' not in st.session_state:
     st.session_state.schedule_output = ""
+if 'schedules' not in st.session_state:
+    st.session_state.schedules = {
+        'simple': {'output': "", 'efficiency': 0, 'name': 'Simple Priority Scheduler'},
+        'improved': {'output': "", 'efficiency': 0, 'name': 'Improved Greedy Scheduler'},
+        'dp': {'output': "", 'efficiency': 0, 'name': 'DP-Based Scheduler', 'schedule_list': []}
+    }
+if 'selected_schedule' not in st.session_state:
+    st.session_state.selected_schedule = None
 if 'task_message' not in st.session_state:
     st.session_state.task_message = {"type": None, "text": ""}
 if 'form_key' not in st.session_state:
@@ -98,29 +109,20 @@ with st.sidebar:
         
         task_id = st.number_input("Task ID", min_value=1, value=default_task_id, step=1, key=f"task_id_{st.session_state.form_key}")
         
-        # Task Description with inline clear button
-        st.write("**Task Description**")
-        desc_col1, desc_col2 = st.columns([4, 1])
-        with desc_col1:
-            # Use session state value if available, otherwise empty
-            desc_default = st.session_state.task_description_value if st.session_state.task_description_value else ""
-            task_description = st.text_input(
-                "", 
-                value=desc_default,
-                placeholder="e.g., Morning jog", 
-                key=f"task_desc_{st.session_state.form_key}",
-                label_visibility="collapsed"
-            )
-            # Sync with session state
-            if task_description:
-                st.session_state.task_description_value = task_description
-            elif not task_description and desc_default:
-                st.session_state.task_description_value = ""
-        with desc_col2:
-            st.write("")  # Spacing for alignment
-            if st.form_submit_button("🗑️", help="Clear description", use_container_width=True):
-                st.session_state.task_description_value = ""
-                st.rerun()
+        # Task Description
+        # Use session state value if available, otherwise empty
+        desc_default = st.session_state.task_description_value if st.session_state.task_description_value else ""
+        task_description = st.text_input(
+            "Task Description", 
+            value=desc_default,
+            placeholder="e.g., Morning jog", 
+            key=f"task_desc_{st.session_state.form_key}"
+        )
+        # Sync with session state
+        if task_description:
+            st.session_state.task_description_value = task_description
+        elif not task_description and desc_default:
+            st.session_state.task_description_value = ""
         
         task_duration = st.number_input("Duration (minutes)", min_value=1, value=30, step=1, key=f"task_dur_{st.session_state.form_key}")
         
@@ -193,6 +195,11 @@ with st.sidebar:
                     "text": "Please enter a task description"
                 }
     
+    # Clear description button (outside form)
+    if st.button("🗑️ Clear Task Description", key=f"clear_desc_btn_{st.session_state.form_key}", help="Clear the description field"):
+        st.session_state.task_description_value = ""
+        st.rerun()
+    
     # Display message outside form (persists after form clears)
     if st.session_state.task_message["type"]:
         if st.session_state.task_message["type"] == "success":
@@ -208,6 +215,12 @@ with st.sidebar:
     if st.button("🗑️ Clear All Tasks", type="secondary"):
         st.session_state.tasks = []
         st.session_state.schedule_output = ""
+        st.session_state.schedules = {
+            'simple': {'output': "", 'efficiency': 0, 'name': 'Simple Priority Scheduler'},
+            'improved': {'output': "", 'efficiency': 0, 'name': 'Improved Greedy Scheduler'},
+            'dp': {'output': "", 'efficiency': 0, 'name': 'DP-Based Scheduler', 'schedule_list': []}
+        }
+        st.session_state.selected_schedule = None
         st.rerun()
 
 # Main content area
@@ -233,6 +246,12 @@ with col1:
                 if st.button(f"Remove", key=f"remove_{i}"):
                     st.session_state.tasks.pop(i)
                     st.session_state.schedule_output = ""
+                    st.session_state.schedules = {
+                        'simple': {'output': "", 'efficiency': 0, 'name': 'Simple Priority Scheduler'},
+                        'improved': {'output': "", 'efficiency': 0, 'name': 'Improved Greedy Scheduler'},
+                        'dp': {'output': "", 'efficiency': 0, 'name': 'DP-Based Scheduler', 'schedule_list': []}
+                    }
+                    st.session_state.selected_schedule = None
                     st.rerun()
         
         st.info(f"Total tasks: {len(st.session_state.tasks)}")
@@ -281,67 +300,246 @@ with col2:
                     )
                     task_objects.append(task_obj)
                 
-                # Create scheduler
-                scheduler = TaskScheduler(task_objects)
+                # Generate schedules using all three approaches
+                with st.spinner("Generating schedules with all three algorithms..."):
+                    # 1. Simple Priority Scheduler
+                    try:
+                        old_stdout = sys.stdout
+                        sys.stdout = captured_output = io.StringIO()
+                        scheduler1 = TaskScheduler(task_objects.copy())
+                        efficiency1 = scheduler1.run_task_scheduler(starting_time)
+                        sys.stdout = old_stdout
+                        output1 = captured_output.getvalue()
+                        st.session_state.schedules['simple'] = {
+                            'output': output1,
+                            'efficiency': efficiency1,
+                            'name': 'Simple Priority Scheduler'
+                        }
+                    except Exception as e:
+                        st.session_state.schedules['simple'] = {
+                            'output': f"Error: {str(e)}",
+                            'efficiency': 0,
+                            'name': 'Simple Priority Scheduler'
+                        }
+                    
+                    # 2. Improved Greedy Scheduler
+                    try:
+                        old_stdout = sys.stdout
+                        sys.stdout = captured_output = io.StringIO()
+                        scheduler2 = ImprovedGreedy_Scheduler(task_objects.copy())
+                        efficiency2 = scheduler2.run_task_scheduler(starting_time)
+                        sys.stdout = old_stdout
+                        output2 = captured_output.getvalue()
+                        st.session_state.schedules['improved'] = {
+                            'output': output2,
+                            'efficiency': efficiency2,
+                            'name': 'Improved Greedy Scheduler'
+                        }
+                    except Exception as e:
+                        st.session_state.schedules['improved'] = {
+                            'output': f"Error: {str(e)}",
+                            'efficiency': 0,
+                            'name': 'Improved Greedy Scheduler'
+                        }
+                    
+                    # 3. DP-Based Scheduler
+                    try:
+                        old_stdout = sys.stdout
+                        sys.stdout = captured_output = io.StringIO()
+                        scheduler3 = DP_Scheduler(task_objects.copy())
+                        schedule_list = scheduler3.schedule_tasks(starting_time)
+                        scheduler3.print_schedule()
+                        sys.stdout = old_stdout
+                        output3 = captured_output.getvalue()
+                        
+                        # Calculate efficiency for DP scheduler
+                        if schedule_list:
+                            total_duration = sum(task.duration for task, _ in schedule_list)
+                            first_start = schedule_list[0][1]
+                            last_end_time = scheduler3._add_minutes(
+                                schedule_list[-1][1],
+                                schedule_list[-1][0].duration
+                            )
+                            total_time = scheduler3.time_difference(first_start, last_end_time)
+                            efficiency3 = round((total_duration / total_time * 100), 2) if total_time > 0 else 0
+                        else:
+                            efficiency3 = 0
+                        
+                        st.session_state.schedules['dp'] = {
+                            'output': output3,
+                            'efficiency': efficiency3,
+                            'name': 'DP-Based Scheduler',
+                            'schedule_list': schedule_list
+                        }
+                    except Exception as e:
+                        st.session_state.schedules['dp'] = {
+                            'output': f"Error: {str(e)}",
+                            'efficiency': 0,
+                            'name': 'DP-Based Scheduler',
+                            'schedule_list': []
+                        }
                 
-                # Capture output
-                old_stdout = sys.stdout
-                sys.stdout = captured_output = io.StringIO()
-                
-                # Run scheduler
-                efficiency = scheduler.run_task_scheduler(starting_time)
-                
-                # Restore stdout
-                sys.stdout = old_stdout
-                
-                # Store output
-                output_text = captured_output.getvalue()
-                st.session_state.schedule_output = output_text
-                
-                st.success("Schedule generated successfully! ✅")
+                st.session_state.selected_schedule = None  # Reset selection
+                st.success("All 3 schedules generated successfully! ✅")
                 
             except Exception as e:
                 st.error(f"Error generating schedule: {str(e)}")
                 st.exception(e)
 
-# Display schedule output
-if st.session_state.schedule_output:
+# Display all three schedules
+if any(st.session_state.schedules[key]['output'] for key in st.session_state.schedules):
     st.divider()
-    st.header("📊 Generated Schedule")
+    st.header("📊 Generated Schedules")
+    st.markdown("**Compare the three scheduling approaches and select your preferred one:**")
     
-    # Display in a nice format
-    output_lines = st.session_state.schedule_output.split('\n')
+    # Comparison summary table
+    summary_data = []
+    for key in ['simple', 'improved', 'dp']:
+        schedule = st.session_state.schedules[key]
+        if schedule['output']:
+            summary_data.append({
+                'Algorithm': schedule['name'],
+                'Efficiency (%)': f"{schedule['efficiency']:.2f}" if schedule['efficiency'] > 0 else "N/A",
+                'Status': '✅ Generated' if schedule['efficiency'] > 0 else '❌ Error'
+            })
     
-    # Create columns for better layout
-    for line in output_lines:
-        if line.strip():
-            if '🕰' in line:
-                st.markdown(f"### {line}")
-            elif '✅' in line or '🏁' in line:
-                st.success(line)
-            elif 'started' in line.lower():
-                st.markdown(f"  {line}")
-            elif 'completed' in line.lower():
-                st.info(line)
-            elif 'efficiency' in line.lower():
-                st.metric("Scheduler Efficiency", line.split()[-1] + "%" if "%" not in line else line.split()[-1])
-            else:
-                st.text(line)
+    if summary_data:
+        st.markdown("### 📈 Quick Comparison")
+        df = pd.DataFrame(summary_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     
-    # Download button for schedule
-    st.download_button(
-        label="📥 Download Schedule as Text",
-        data=st.session_state.schedule_output,
-        file_name=f"schedule_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-        mime="text/plain"
-    )
+    # Create tabs for each scheduler
+    tab1, tab2, tab3 = st.tabs([
+        f"📌 {st.session_state.schedules['simple']['name']}",
+        f"⚡ {st.session_state.schedules['improved']['name']}",
+        f"🎯 {st.session_state.schedules['dp']['name']}"
+    ])
+    
+    # Tab 1: Simple Priority Scheduler
+    with tab1:
+        st.subheader(st.session_state.schedules['simple']['name'])
+        if st.session_state.schedules['simple']['efficiency'] > 0:
+            col_eff1, col_btn1 = st.columns([1, 1])
+            with col_eff1:
+                st.metric("Efficiency", f"{st.session_state.schedules['simple']['efficiency']:.2f}%")
+            with col_btn1:
+                if st.button("✅ Select This Schedule", key="select_simple", use_container_width=True):
+                    st.session_state.selected_schedule = 'simple'
+                    st.success("Simple Priority Scheduler selected!")
+        
+        output_lines = st.session_state.schedules['simple']['output'].split('\n')
+        for line in output_lines:
+            if line.strip():
+                if '🕰' in line:
+                    st.markdown(f"### {line}")
+                elif '✅' in line or '🏁' in line:
+                    st.success(line)
+                elif 'started' in line.lower():
+                    st.markdown(f"  {line}")
+                elif 'completed' in line.lower():
+                    st.info(line)
+                elif 'efficiency' in line.lower():
+                    pass  # Already shown as metric
+                else:
+                    st.text(line)
+    
+    # Tab 2: Improved Greedy Scheduler
+    with tab2:
+        st.subheader(st.session_state.schedules['improved']['name'])
+        if st.session_state.schedules['improved']['efficiency'] > 0:
+            col_eff2, col_btn2 = st.columns([1, 1])
+            with col_eff2:
+                st.metric("Efficiency", f"{st.session_state.schedules['improved']['efficiency']:.2f}%")
+            with col_btn2:
+                if st.button("✅ Select This Schedule", key="select_improved", use_container_width=True):
+                    st.session_state.selected_schedule = 'improved'
+                    st.success("Improved Greedy Scheduler selected!")
+        
+        output_lines = st.session_state.schedules['improved']['output'].split('\n')
+        for line in output_lines:
+            if line.strip():
+                if '🕰' in line:
+                    st.markdown(f"### {line}")
+                elif '✅' in line or '🏁' in line:
+                    st.success(line)
+                elif 'started' in line.lower():
+                    st.markdown(f"  {line}")
+                elif 'completed' in line.lower():
+                    st.info(line)
+                elif 'efficiency' in line.lower():
+                    pass  # Already shown as metric
+                else:
+                    st.text(line)
+    
+    # Tab 3: DP-Based Scheduler
+    with tab3:
+        st.subheader(st.session_state.schedules['dp']['name'])
+        if st.session_state.schedules['dp']['efficiency'] > 0:
+            col_eff3, col_btn3 = st.columns([1, 1])
+            with col_eff3:
+                st.metric("Efficiency", f"{st.session_state.schedules['dp']['efficiency']:.2f}%")
+            with col_btn3:
+                if st.button("✅ Select This Schedule", key="select_dp", use_container_width=True):
+                    st.session_state.selected_schedule = 'dp'
+                    st.success("DP-Based Scheduler selected!")
+        
+        output_lines = st.session_state.schedules['dp']['output'].split('\n')
+        for line in output_lines:
+            if line.strip():
+                if line.startswith('=') or 'DP-BASED' in line:
+                    st.markdown(f"**{line}**")
+                elif '🕰' in line:
+                    st.markdown(f"### {line}")
+                elif '📋' in line or '📊' in line or '⚠️' in line:
+                    st.markdown(line)
+                elif 'Statistics' in line or 'Total' in line or 'Efficiency' in line:
+                    st.info(line)
+                else:
+                    st.text(line)
+    
+    # Selected schedule display
+    st.divider()
+    if st.session_state.selected_schedule:
+        st.header("⭐ Your Selected Schedule")
+        selected = st.session_state.selected_schedule
+        st.success(f"You have selected: **{st.session_state.schedules[selected]['name']}**")
+        
+        # Display selected schedule prominently
+        output_lines = st.session_state.schedules[selected]['output'].split('\n')
+        for line in output_lines:
+            if line.strip():
+                if '🕰' in line:
+                    st.markdown(f"### {line}")
+                elif '✅' in line or '🏁' in line:
+                    st.success(line)
+                elif 'started' in line.lower():
+                    st.markdown(f"  {line}")
+                elif 'completed' in line.lower():
+                    st.info(line)
+                elif '📋' in line or '📊' in line:
+                    st.markdown(line)
+                elif 'efficiency' in line.lower() and selected != 'dp':
+                    pass
+                else:
+                    st.text(line)
+        
+        # Download button for selected schedule
+        st.download_button(
+            label="📥 Download Selected Schedule as Text",
+            data=st.session_state.schedules[selected]['output'],
+            file_name=f"schedule_{selected}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            mime="text/plain"
+        )
+    else:
+        st.info("👆 Select a schedule from the tabs above to see it displayed here and download it.")
 
 # Footer
 st.divider()
 st.markdown(
     """
     <div style='text-align: center; color: #666; padding: 1rem;'>
-        <p>Task Scheduler - Priority-based task scheduling system</p>
+        <p><strong>Task Scheduler</strong> - Advanced multi-algorithm scheduling system</p>
+        <p>Three scheduling approaches: Simple Priority, Improved Greedy, and DP-Based</p>
         <p>Supports dependencies, scheduled times, and category-based prioritization</p>
     </div>
     """,
