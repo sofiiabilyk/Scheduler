@@ -48,6 +48,8 @@ if 'tasks' not in st.session_state:
     st.session_state.tasks = []
 if 'schedule_output' not in st.session_state:
     st.session_state.schedule_output = ""
+if 'task_message' not in st.session_state:
+    st.session_state.task_message = {"type": None, "text": ""}
 
 def create_task(id, description, duration, dependencies, scheduled, category):
     """Create a Task object"""
@@ -84,61 +86,86 @@ st.markdown('<p class="sub-header">Schedule your tasks efficiently with priority
 with st.sidebar:
     st.header("➕ Add New Task")
     
-    task_id = st.number_input("Task ID", min_value=1, value=len(st.session_state.tasks) + 1, step=1)
-    task_description = st.text_input("Task Description", placeholder="e.g., Morning jog")
-    task_duration = st.number_input("Duration (minutes)", min_value=1, value=30, step=1)
-    
-    st.subheader("Optional Settings")
-    
-    # Dependencies
-    if st.session_state.tasks:
-        dependency_options = [t['id'] for t in st.session_state.tasks]
-        selected_dependencies = st.multiselect(
-            "Dependencies (Task IDs that must be completed first)",
-            dependency_options,
-            help="Select task IDs that must be completed before this task"
-        )
-    else:
-        selected_dependencies = []
-        st.info("Add more tasks to set dependencies")
-    
-    # Scheduled time
-    has_scheduled_time = st.checkbox("Has specific scheduled time?")
-    if has_scheduled_time:
-        scheduled_hour = st.slider("Hour", 0, 23, 9)
-        scheduled_minute = st.slider("Minute", 0, 59, 0, step=5)
-        scheduled_time = f"{scheduled_hour:02d}:{scheduled_minute:02d}"
-    else:
-        scheduled_time = "25:25"
-    
-    # Category
-    category = st.selectbox(
-        "Category",
-        ["Routine", "Family", "Growth", "Friends", "Hobby", "Other"],
-        index=5
-    )
-    
-    # Add task button
-    if st.button("Add Task", type="primary"):
-        if task_description:
-            new_task = {
-                'id': task_id,
-                'description': task_description,
-                'duration': task_duration,
-                'dependencies': selected_dependencies,
-                'scheduled': scheduled_time,
-                'category': category
-            }
-            
-            # Check if ID already exists
-            if any(t['id'] == task_id for t in st.session_state.tasks):
-                st.error(f"Task ID {task_id} already exists! Please use a different ID.")
-            else:
-                st.session_state.tasks.append(new_task)
-                st.success(f"Task '{task_description}' added!")
-                st.rerun()
+    # Use form to automatically clear fields after submission
+    with st.form("add_task_form", clear_on_submit=True):
+        # Calculate default task ID
+        default_task_id = len(st.session_state.tasks) + 1 if st.session_state.tasks else 1
+        
+        task_id = st.number_input("Task ID", min_value=1, value=default_task_id, step=1)
+        task_description = st.text_input("Task Description", placeholder="e.g., Morning jog")
+        task_duration = st.number_input("Duration (minutes)", min_value=1, value=30, step=1)
+        
+        st.subheader("Optional Settings")
+        
+        # Dependencies
+        if st.session_state.tasks:
+            dependency_options = [t['id'] for t in st.session_state.tasks]
+            selected_dependencies = st.multiselect(
+                "Dependencies (Task IDs that must be completed first)",
+                dependency_options,
+                help="Select task IDs that must be completed before this task"
+            )
         else:
-            st.error("Please enter a task description")
+            selected_dependencies = []
+            st.info("Add more tasks to set dependencies")
+        
+        # Scheduled time
+        has_scheduled_time = st.checkbox("Has specific scheduled time?")
+        if has_scheduled_time:
+            scheduled_hour = st.slider("Hour", 0, 23, 9)
+            scheduled_minute = st.slider("Minute", 0, 59, 0, step=5)
+            scheduled_time = f"{scheduled_hour:02d}:{scheduled_minute:02d}"
+        else:
+            scheduled_time = "25:25"
+        
+        # Category
+        category = st.selectbox(
+            "Category",
+            ["Routine", "Family", "Growth", "Friends", "Hobby", "Other"],
+            index=5
+        )
+        
+        # Add task button (inside form)
+        submitted = st.form_submit_button("Add Task", type="primary")
+        
+        if submitted:
+            if task_description:
+                new_task = {
+                    'id': task_id,
+                    'description': task_description,
+                    'duration': task_duration,
+                    'dependencies': selected_dependencies,
+                    'scheduled': scheduled_time,
+                    'category': category
+                }
+                
+                # Check if ID already exists
+                if any(t['id'] == task_id for t in st.session_state.tasks):
+                    st.session_state.task_message = {
+                        "type": "error",
+                        "text": f"Task ID {task_id} already exists! Please use a different ID."
+                    }
+                else:
+                    st.session_state.tasks.append(new_task)
+                    st.session_state.task_message = {
+                        "type": "success",
+                        "text": f"Task '{task_description}' added!"
+                    }
+                    st.rerun()
+            else:
+                st.session_state.task_message = {
+                    "type": "error",
+                    "text": "Please enter a task description"
+                }
+    
+    # Display message outside form (persists after form clears)
+    if st.session_state.task_message["type"]:
+        if st.session_state.task_message["type"] == "success":
+            st.success(st.session_state.task_message["text"])
+        elif st.session_state.task_message["type"] == "error":
+            st.error(st.session_state.task_message["text"])
+        # Clear message after displaying
+        st.session_state.task_message = {"type": None, "text": ""}
     
     st.divider()
     
